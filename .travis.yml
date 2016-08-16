@@ -4,12 +4,11 @@ go:
 - 1.6
 
 before_install:
+- cd /usr/local
 - wget https://storage.googleapis.com/appengine-sdks/featured/go_appengine_sdk_linux_amd64-1.9.40.zip
 - unzip go_appengine_sdk_*.zip
-- pwd
-- env
-- ls
-- find .
+- cd ${TRAVIS_BUILD_DIR}
+- ls /usr/local/go_appengine
 
 install:
 - goapp get .
