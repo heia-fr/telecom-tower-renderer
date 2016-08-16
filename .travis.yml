@@ -11,8 +11,8 @@ before_install:
 - export PATH=$PATH:$HOME/go_appengine
 
 install:
-- goapp get .
+- goapp get -t ./...
 - goapp build
 
 script:
-- true
+- goapp test -v ./...
