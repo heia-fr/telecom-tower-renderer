@@ -46,7 +46,6 @@ type Matrix struct {
 
 func init() {
 	router := mux.NewRouter().StrictSlash(true)
-	router.HandleFunc("/version", version)
 	router.HandleFunc("/renderText", renderText)
 	router.HandleFunc("/renderSpace", renderSpace)
 	router.HandleFunc("/renderImage", renderImage)
@@ -54,14 +53,10 @@ func init() {
 	http.Handle("/", router)
 }
 
-func version(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprint(w, "Version 0.0.1\n")
-	fmt.Fprint(w, r)
-}
-
 func renderSpace(w http.ResponseWriter, r *http.Request) {
 	space := Space{}
 	d := json.NewDecoder(r.Body)
+	defer r.Body.Close()
 	err := d.Decode(&space)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid JSON: %v", err), 400)
@@ -81,61 +76,10 @@ func renderSpace(w http.ResponseWriter, r *http.Request) {
 	e.Encode(&matrix)
 }
 
-func renderImage(w http.ResponseWriter, r *http.Request) {
-	m, _, err := image.Decode(r.Body)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Invalid Image: %v", err), 400)
-		return
-	}
-	bounds := m.Bounds()
-	if bounds.Max.Y-bounds.Min.Y != 8 {
-		http.Error(w, "Invalid Image Size. Must be 8 pixel heigh", 400)
-		return
-	}
-
-	result := ledmatrix.NewMatrix(bounds.Max.X-bounds.Min.X, bounds.Max.Y-bounds.Min.Y)
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			r, g, b, _ := m.At(x, y).RGBA()
-			result.SetPixel(x-bounds.Min.X, y-bounds.Min.Y, ledmatrix.RGB(int(r>>8), int(g>>8), int(b>>8)))
-		}
-	}
-
-	e := json.NewEncoder(w)
-	e.Encode(&result)
-}
-
-func join(w http.ResponseWriter, r *http.Request) {
-	var list []Matrix
-	d := json.NewDecoder(r.Body)
-	err := d.Decode(&list)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Invalid JSON: %v", err), 400)
-		return
-	}
-	if len(list) == 0 {
-		http.Error(w, "Empty list", 400)
-		return
-	}
-	result := &ledmatrix.Matrix{
-		Rows:    list[0].Rows,
-		Columns: list[0].Columns,
-		Bitmap:  list[0].Bitmap,
-	}
-	for i := 1; i < len(list); i++ {
-		result.Append(&ledmatrix.Matrix{
-			Rows:    list[i].Rows,
-			Columns: list[i].Columns,
-			Bitmap:  list[i].Bitmap,
-		})
-	}
-	e := json.NewEncoder(w)
-	e.Encode(&result)
-}
-
 func renderText(w http.ResponseWriter, r *http.Request) {
 	msg := TextMsg{}
 	d := json.NewDecoder(r.Body)
+	defer r.Body.Close()
 	err := d.Decode(&msg)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid JSON: %v", err), 400)
@@ -171,4 +115,58 @@ func renderText(w http.ResponseWriter, r *http.Request) {
 	e := json.NewEncoder(w)
 
 	e.Encode(&matrix)
+}
+
+func renderImage(w http.ResponseWriter, r *http.Request) {
+	m, _, err := image.Decode(r.Body)
+	defer r.Body.Close()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid Image: %v", err), 400)
+		return
+	}
+	bounds := m.Bounds()
+	if bounds.Max.Y-bounds.Min.Y != 8 {
+		http.Error(w, "Invalid Image Size. Must be 8 pixel heigh", 400)
+		return
+	}
+
+	result := ledmatrix.NewMatrix(bounds.Max.X-bounds.Min.X, bounds.Max.Y-bounds.Min.Y)
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			r, g, b, _ := m.At(x, y).RGBA()
+			result.SetPixel(x-bounds.Min.X, y-bounds.Min.Y, ledmatrix.RGB(int(r>>8), int(g>>8), int(b>>8)))
+		}
+	}
+
+	e := json.NewEncoder(w)
+	e.Encode(&result)
+}
+
+func join(w http.ResponseWriter, r *http.Request) {
+	var list []Matrix
+	d := json.NewDecoder(r.Body)
+	defer r.Body.Close()
+	err := d.Decode(&list)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid JSON: %v", err), 400)
+		return
+	}
+	if len(list) == 0 {
+		http.Error(w, "Empty list", 400)
+		return
+	}
+	result := &ledmatrix.Matrix{
+		Rows:    list[0].Rows,
+		Columns: list[0].Columns,
+		Bitmap:  list[0].Bitmap,
+	}
+	for i := 1; i < len(list); i++ {
+		result.Append(&ledmatrix.Matrix{
+			Rows:    list[i].Rows,
+			Columns: list[i].Columns,
+			Bitmap:  list[i].Bitmap,
+		})
+	}
+	e := json.NewEncoder(w)
+	e.Encode(&result)
 }
