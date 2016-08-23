@@ -17,6 +17,7 @@ package renderer
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/BlueMasters/tokenauth"
 	"github.com/gorilla/mux"
 	"github.com/heia-fr/telecom-tower/ledmatrix"
 	"github.com/heia-fr/telecom-tower/ledmatrix/font"
@@ -44,6 +45,13 @@ type Matrix struct {
 	Bitmap  ledmatrix.Stripe `json:"bitmap"`
 }
 
+var ta = tokenauth.TokenAuth{
+	PublicKeyXVar:  "PUBLIC_KEY_X",
+	PublicKeyYVar:  "PUBLIC_KEY_Y",
+	DatastoreKind:  "ValidTokens",
+	MemcachePrefix: "valid-token-",
+}
+
 func init() {
 	router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/renderText", renderText)
@@ -54,6 +62,11 @@ func init() {
 }
 
 func renderSpace(w http.ResponseWriter, r *http.Request) {
+	if err := ta.CheckAuth(r); err != nil {
+		http.Error(w, fmt.Sprintf("Access denied: %v", err), 401)
+		return
+	}
+
 	space := Space{}
 	d := json.NewDecoder(r.Body)
 	defer r.Body.Close()
@@ -77,6 +90,11 @@ func renderSpace(w http.ResponseWriter, r *http.Request) {
 }
 
 func renderText(w http.ResponseWriter, r *http.Request) {
+	if err := ta.CheckAuth(r); err != nil {
+		http.Error(w, fmt.Sprintf("Access denied: %v", err), 401)
+		return
+	}
+
 	msg := TextMsg{}
 	d := json.NewDecoder(r.Body)
 	defer r.Body.Close()
@@ -118,6 +136,11 @@ func renderText(w http.ResponseWriter, r *http.Request) {
 }
 
 func renderImage(w http.ResponseWriter, r *http.Request) {
+	if err := ta.CheckAuth(r); err != nil {
+		http.Error(w, fmt.Sprintf("Access denied: %v", err), 401)
+		return
+	}
+
 	m, _, err := image.Decode(r.Body)
 	defer r.Body.Close()
 	if err != nil {
@@ -143,6 +166,11 @@ func renderImage(w http.ResponseWriter, r *http.Request) {
 }
 
 func join(w http.ResponseWriter, r *http.Request) {
+	if err := ta.CheckAuth(r); err != nil {
+		http.Error(w, fmt.Sprintf("Access denied: %v", err), 401)
+		return
+	}
+
 	var list []Matrix
 	d := json.NewDecoder(r.Body)
 	defer r.Body.Close()

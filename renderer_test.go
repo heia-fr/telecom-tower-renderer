@@ -1,16 +1,55 @@
+// Copyright 2016 Jacques Supcik, HEIA-FR
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package renderer
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"encoding/json"
+	"fmt"
+	"github.com/dgrijalva/jwt-go"
+	"github.com/hashicorp/go-uuid"
 	"github.com/stretchr/testify/assert"
-	"net/http"
+	"golang.org/x/net/context"
+	"google.golang.org/appengine"
+	"google.golang.org/appengine/aetest"
+	"google.golang.org/appengine/datastore"
 	"net/http/httptest"
 	"os"
 	"testing"
 )
 
-func TestRender(t *testing.T) {
+type token struct {
+	Present bool
+}
+
+var validUUID, invalidUUID string
+var validToken, invalidToken string
+
+func insertToken(ctx context.Context, uuid string) error {
+	t := token{
+		Present: true,
+	}
+	key := datastore.NewKey(ctx, "ValidTokens", uuid, 0, nil)
+	_, err := datastore.Put(ctx, key, &t)
+	return err
+}
+
+func TestRenderText(t *testing.T) {
 	txt := TextMsg{
 		Text:            "+",
 		ForegroundColor: "#000100",
@@ -22,8 +61,14 @@ func TestRender(t *testing.T) {
 	enc := json.NewEncoder(&b)
 	enc.Encode(&txt)
 
-	req, err := http.NewRequest("POST", "/renderText", &b)
+	inst, err := aetest.NewInstance(nil)
 	assert.NoError(t, err)
+
+	req, err := inst.NewRequest("POST", "/renderText", &b)
+	assert.NoError(t, err)
+
+	insertToken(appengine.NewContext(req), validUUID)
+	req.Header.Add("Authorization", "Bearer "+validToken)
 
 	w := httptest.NewRecorder()
 	renderText(w, req)
@@ -49,8 +94,14 @@ func TestRenderImage(t *testing.T) {
 	b, err := os.Open("logo.png")
 	assert.NoError(t, err)
 
-	req, err := http.NewRequest("POST", "/renderImage", b)
+	inst, err := aetest.NewInstance(nil)
 	assert.NoError(t, err)
+
+	req, err := inst.NewRequest("POST", "/renderImage", b)
+	assert.NoError(t, err)
+
+	insertToken(appengine.NewContext(req), validUUID)
+	req.Header.Add("Authorization", "Bearer "+validToken)
 
 	w := httptest.NewRecorder()
 	renderImage(w, req)
@@ -82,8 +133,14 @@ func TestRenderSpace(t *testing.T) {
 	enc := json.NewEncoder(&b)
 	enc.Encode(&txt)
 
-	req, err := http.NewRequest("POST", "/renderSpace", &b)
+	inst, err := aetest.NewInstance(nil)
 	assert.NoError(t, err)
+
+	req, err := inst.NewRequest("POST", "/renderSpace", &b)
+	assert.NoError(t, err)
+
+	insertToken(appengine.NewContext(req), validUUID)
+	req.Header.Add("Authorization", "Bearer "+validToken)
 
 	w := httptest.NewRecorder()
 	renderSpace(w, req)
@@ -124,8 +181,14 @@ func TestJoin(t *testing.T) {
 	enc := json.NewEncoder(&b)
 	enc.Encode(&txt1)
 
-	req, err := http.NewRequest("POST", "/renderText", &b)
+	inst, err := aetest.NewInstance(nil)
 	assert.NoError(t, err)
+
+	req, err := inst.NewRequest("POST", "/renderText", &b)
+	assert.NoError(t, err)
+
+	insertToken(appengine.NewContext(req), validUUID)
+	req.Header.Add("Authorization", "Bearer "+validToken)
 
 	w := httptest.NewRecorder()
 	renderText(w, req)
@@ -149,8 +212,11 @@ func TestJoin(t *testing.T) {
 	b.Reset()
 	enc.Encode(&txt2)
 
-	req, err = http.NewRequest("POST", "/renderText", &b)
+	req, err = inst.NewRequest("POST", "/renderText", &b)
 	assert.NoError(t, err)
+
+	insertToken(appengine.NewContext(req), validUUID)
+	req.Header.Add("Authorization", "Bearer "+validToken)
 
 	w = httptest.NewRecorder()
 	renderText(w, req)
@@ -176,8 +242,11 @@ func TestJoin(t *testing.T) {
 	b.Reset()
 	enc.Encode(&list)
 
-	req, err = http.NewRequest("POST", "/join", &b)
+	req, err = inst.NewRequest("POST", "/join", &b)
 	assert.NoError(t, err)
+
+	insertToken(appengine.NewContext(req), validUUID)
+	req.Header.Add("Authorization", "Bearer "+validToken)
 
 	w = httptest.NewRecorder()
 	join(w, req)
@@ -203,126 +272,207 @@ func TestJoin(t *testing.T) {
 }
 
 func TestRenderSpaceErrors(t *testing.T) {
-    b := bytes.NewBufferString("GARBAGE")
-    req, err := http.NewRequest("POST", "/renderSpace", b)
-    assert.NoError(t, err)
+	b := bytes.NewBufferString("GARBAGE")
 
-    w := httptest.NewRecorder()
-    renderSpace(w, req)
+	inst, err := aetest.NewInstance(nil)
+	assert.NoError(t, err)
 
-    assert.Equal(t, 400, w.Code)
+	req, err := inst.NewRequest("POST", "/renderSpace", b)
+	assert.NoError(t, err)
 
-    txt := Space{
-        Len: 12,
-        BackgroundColor: "BADCOLOR",
-    }
+	insertToken(appengine.NewContext(req), validUUID)
+	req.Header.Add("Authorization", "Bearer "+validToken)
 
-    var b1 bytes.Buffer
-    enc := json.NewEncoder(&b1)
-    enc.Encode(&txt)
+	w := httptest.NewRecorder()
+	renderSpace(w, req)
 
-    req, err = http.NewRequest("POST", "/renderSpace", &b1)
-    assert.NoError(t, err)
+	assert.Equal(t, 400, w.Code)
 
-    w = httptest.NewRecorder()
-    renderSpace(w, req)
+	txt := Space{
+		Len:             12,
+		BackgroundColor: "BADCOLOR",
+	}
 
-    assert.Equal(t, 400, w.Code)
+	var b1 bytes.Buffer
+	enc := json.NewEncoder(&b1)
+	enc.Encode(&txt)
+
+	req, err = inst.NewRequest("POST", "/renderSpace", &b1)
+	assert.NoError(t, err)
+
+	insertToken(appengine.NewContext(req), validUUID)
+	req.Header.Add("Authorization", "Bearer "+validToken)
+
+	w = httptest.NewRecorder()
+	renderSpace(w, req)
+
+	assert.Equal(t, 400, w.Code)
 }
 
 func TestRenderTextErrors(t *testing.T) {
-    b := bytes.NewBufferString("GARBAGE")
-    req, err := http.NewRequest("POST", "/renderText", b)
-    assert.NoError(t, err)
+	b := bytes.NewBufferString("GARBAGE")
 
-    w := httptest.NewRecorder()
-    renderText(w, req)
+	inst, err := aetest.NewInstance(nil)
+	assert.NoError(t, err)
 
-    assert.Equal(t, 400, w.Code)
+	req, err := inst.NewRequest("POST", "/renderText", b)
+	assert.NoError(t, err)
 
-    txt := TextMsg{
-        Text:            "+",
-        ForegroundColor: "BADCOLOR",
-        BackgroundColor: "#010000",
-        FontSize:        6,
-    }
+	insertToken(appengine.NewContext(req), validUUID)
+	req.Header.Add("Authorization", "Bearer "+validToken)
 
-    var b1 bytes.Buffer
-    enc := json.NewEncoder(&b1)
-    enc.Encode(&txt)
+	w := httptest.NewRecorder()
+	renderText(w, req)
 
-    req, err = http.NewRequest("POST", "/renderText", &b1)
-    assert.NoError(t, err)
+	assert.Equal(t, 400, w.Code)
 
-    w = httptest.NewRecorder()
-    renderText(w, req)
+	txt := TextMsg{
+		Text:            "+",
+		ForegroundColor: "BADCOLOR",
+		BackgroundColor: "#010000",
+		FontSize:        6,
+	}
 
+	var b1 bytes.Buffer
+	enc := json.NewEncoder(&b1)
+	enc.Encode(&txt)
 
-    txt = TextMsg{
-        Text:            "+",
-        ForegroundColor: "#ff00CC",
-        BackgroundColor: "BADCOLOR",
-        FontSize:        6,
-    }
+	req, err = inst.NewRequest("POST", "/renderText", &b1)
+	assert.NoError(t, err)
 
-    b1.Reset()
-    enc.Encode(&txt)
+	insertToken(appengine.NewContext(req), validUUID)
+	req.Header.Add("Authorization", "Bearer "+validToken)
 
-    req, err = http.NewRequest("POST", "/renderText", &b1)
-    assert.NoError(t, err)
+	w = httptest.NewRecorder()
+	renderText(w, req)
 
-    w = httptest.NewRecorder()
-    renderText(w, req)
+	txt = TextMsg{
+		Text:            "+",
+		ForegroundColor: "#ff00CC",
+		BackgroundColor: "BADCOLOR",
+		FontSize:        6,
+	}
+
+	b1.Reset()
+	enc.Encode(&txt)
+
+	req, err = inst.NewRequest("POST", "/renderText", &b1)
+	assert.NoError(t, err)
+
+	insertToken(appengine.NewContext(req), validUUID)
+	req.Header.Add("Authorization", "Bearer "+validToken)
+
+	w = httptest.NewRecorder()
+	renderText(w, req)
 }
 
 func TestRenderImageErrors(t *testing.T) {
-    b, err := os.Open("LICENSE")
-    assert.NoError(t, err)
+	b, err := os.Open("LICENSE")
+	assert.NoError(t, err)
 
-    req, err := http.NewRequest("POST", "/renderImage", b)
-    assert.NoError(t, err)
+	inst, err := aetest.NewInstance(nil)
+	assert.NoError(t, err)
 
-    w := httptest.NewRecorder()
-    renderImage(w, req)
+	req, err := inst.NewRequest("POST", "/renderImage", b)
+	assert.NoError(t, err)
 
-    assert.Equal(t, 400, w.Code)
+	insertToken(appengine.NewContext(req), validUUID)
+	req.Header.Add("Authorization", "Bearer "+validToken)
 
-    b, err = os.Open("badsize.png")
-    assert.NoError(t, err)
+	w := httptest.NewRecorder()
+	renderImage(w, req)
 
-    req, err = http.NewRequest("POST", "/renderImage", b)
-    assert.NoError(t, err)
+	assert.Equal(t, 400, w.Code)
 
-    w = httptest.NewRecorder()
-    renderImage(w, req)
+	b, err = os.Open("badsize.png")
+	assert.NoError(t, err)
 
-    assert.Equal(t, 400, w.Code)
+	req, err = inst.NewRequest("POST", "/renderImage", b)
+	assert.NoError(t, err)
+
+	insertToken(appengine.NewContext(req), validUUID)
+	req.Header.Add("Authorization", "Bearer "+validToken)
+
+	w = httptest.NewRecorder()
+	renderImage(w, req)
+
+	assert.Equal(t, 400, w.Code)
 }
 
 func TestJoinError(t *testing.T) {
 
-    b := bytes.NewBufferString("GARBAGE")
+	b := bytes.NewBufferString("GARBAGE")
 
-    req, err := http.NewRequest("POST", "/join", b)
-    assert.NoError(t, err)
+	inst, err := aetest.NewInstance(nil)
+	assert.NoError(t, err)
 
-    w := httptest.NewRecorder()
-    join(w, req)
+	req, err := inst.NewRequest("POST", "/join", b)
+	assert.NoError(t, err)
 
-    assert.Equal(t, 400, w.Code)
+	insertToken(appengine.NewContext(req), validUUID)
+	req.Header.Add("Authorization", "Bearer "+validToken)
 
-    list := []Matrix{}
+	w := httptest.NewRecorder()
+	join(w, req)
 
-    var b1 bytes.Buffer
-    enc := json.NewEncoder(&b1)
+	assert.Equal(t, 400, w.Code)
 
-    enc.Encode(&list)
+	list := []Matrix{}
 
-    req, err = http.NewRequest("POST", "/join", &b1)
-    assert.NoError(t, err)
+	var b1 bytes.Buffer
+	enc := json.NewEncoder(&b1)
 
-    w = httptest.NewRecorder()
-    join(w, req)
+	enc.Encode(&list)
 
-    assert.Equal(t, 400, w.Code)
+	req, err = inst.NewRequest("POST", "/join", &b1)
+	assert.NoError(t, err)
+
+	insertToken(appengine.NewContext(req), validUUID)
+	req.Header.Add("Authorization", "Bearer "+validToken)
+
+	w = httptest.NewRecorder()
+	join(w, req)
+
+	assert.Equal(t, 400, w.Code)
+}
+
+func init() {
+	var err error
+	validUUID, err = uuid.GenerateUUID()
+	if err != nil {
+		panic(err)
+	}
+
+	invalidUUID, err = uuid.GenerateUUID()
+	if err != nil {
+		panic(err)
+	}
+
+	goodPrivateKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+
+	os.Setenv("PUBLIC_KEY_X", fmt.Sprintf("%X", goodPrivateKey.X))
+	os.Setenv("PUBLIC_KEY_Y", fmt.Sprintf("%X", goodPrivateKey.Y))
+
+	validToken, err = jwt.NewWithClaims(jwt.SigningMethodES256, &jwt.StandardClaims{
+		Audience: "basic",
+		Subject:  "Jacques",
+		Issuer:   "BlueMasters",
+		Id:       validUUID,
+	}).SignedString(goodPrivateKey)
+
+	if err != nil {
+		panic(err)
+	}
+
+	invalidToken, err = jwt.NewWithClaims(jwt.SigningMethodES256, &jwt.StandardClaims{
+		Audience: "basic",
+		Subject:  "Jacques",
+		Issuer:   "BlueMasters",
+		Id:       invalidUUID,
+	}).SignedString(goodPrivateKey)
+
+	if err != nil {
+		panic(err)
+	}
+
 }
